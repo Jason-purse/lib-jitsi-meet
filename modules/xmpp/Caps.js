@@ -76,6 +76,8 @@ export function parseDiscoInfo(node) {
 
 /**
  * Implements xep-0115 ( http://xmpp.org/extensions/xep-0115.html )
+ *
+ * 实体能力 ...
  */
 export default class Caps extends Listenable {
     /**
@@ -87,6 +89,8 @@ export default class Caps extends Listenable {
     constructor(connection = {}, node = 'http://jitsi.org/jitsimeet') {
         super();
         this.node = node;
+
+        // Service Discovery
         this.disco = connection.disco;
         if (!this.disco) {
             throw new Error(
@@ -99,19 +103,29 @@ export default class Caps extends Listenable {
 
         // We keep track of features added outside the library and we publish them
         // in the presence of the participant for simplicity, avoiding the disco info request-response.
+        // 为了简单起见，我们跟踪在库外添加的功能，并在参与者在场的情况下发布它们
+        // //，避免了disco信息请求 - 响应。
         this.externalFeatures = new Set();
 
         const emuc = connection.emuc;
 
         emuc.addListener(XMPPEvents.EMUC_ROOM_ADDED,
             room => this._addChatRoom(room));
+
+
         emuc.addListener(XMPPEvents.EMUC_ROOM_REMOVED,
             room => this._removeChatRoom(room));
+
+        // 增加每一个房间
         Object.keys(emuc.rooms).forEach(jid => {
             this._addChatRoom(emuc.rooms[jid]);
         });
 
+        // 增加一个命名空间
+        // 使用此函数扩展命名空间
         Strophe.addNamespace('CAPS', 'http://jabber.org/protocol/caps');
+
+        // 并且 disco 增加一个特性 ...
         this.disco.addFeature(Strophe.NS.CAPS);
     }
 
@@ -219,12 +233,15 @@ export default class Caps extends Listenable {
     /**
      * Adds ChatRoom instance to the list of rooms. Adds listeners to the room
      * and adds "c" element to the presences of the room.
+     *
+     * 增加ChatRoom 实例到  房间列表.. 增加监听器到 room中 并增加 "c" 元素到房间的presence ..
      * @param {ChatRoom} room the room.
      */
     _addChatRoom(room) {
         this.rooms.add(room);
         this._fixChatRoomPresenceMap(room);
 
+        // 使用外部特性更新房间
         this._updateRoomWithExternalFeatures(room);
     }
 
@@ -239,6 +256,8 @@ export default class Caps extends Listenable {
 
     /**
      * Creates/updates the "c" xml node into the presence of the passed room.
+     *
+     * 创建或者更新 "c"的 xml 节点 到 传入房间的 presence中
      * @param {ChatRoom} room the room.
      */
     _fixChatRoomPresenceMap(room) {

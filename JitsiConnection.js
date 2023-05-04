@@ -123,6 +123,8 @@ JitsiConnection.prototype.initJitsiConference = function(name, options) {
  * @param listener {Function} the function that will receive the event
  */
 JitsiConnection.prototype.addEventListener = function(event, listener) {
+
+    // xmpp 是一个服务器连接 ...对象
     this.xmpp.addListener(event, listener);
 };
 

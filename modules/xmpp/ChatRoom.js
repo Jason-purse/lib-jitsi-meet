@@ -19,6 +19,11 @@ import Moderator from './moderator';
 
 const logger = getLogger(__filename);
 
+
+/**
+ * 解析器
+ * @type {{packet2JSON(*, *): void, json2packet(*, *): void}}
+ */
 export const parser = {
     packet2JSON(xmlElement, nodes) {
         for (const child of Array.from(xmlElement.children)) {
@@ -43,6 +48,8 @@ export const parser = {
             this.packet2JSON(child, node.children);
         }
     },
+
+    // json 转为 packet
     json2packet(nodes, packet) {
         for (let i = 0; i < nodes.length; i++) {
             const node = nodes[i];
@@ -83,10 +90,13 @@ export function filterNodeFromPresenceJSON(pres, nodeName) {
 
 // XXX As ChatRoom constructs XMPP stanzas and Strophe is build around the idea
 // of chaining function calls, allow long function call chains.
+// xxx  作为chatRoom 构造XMPP stanzas 并且Strophe 围绕 链式调用构建 ...
 /* eslint-disable newline-per-chained-call */
 
 /**
  * Array of affiliations that are allowed in members only room.
+ *
+ * 房间中 允许的成员
  * @type {string[]}
  */
 const MEMBERS_AFFILIATIONS = [ 'owner', 'admin', 'member' ];
@@ -103,7 +113,7 @@ export default class ChatRoom extends Listenable {
      * @param {XmppConnection} connection - The XMPP connection instance.
      * @param jid
      * @param password
-     * @param XMPP
+     * @param {XMPP} XMPP
      * @param options
      * @param {boolean} options.disableFocus - when set to {@code false} will
      * not invite Jicofo into the room.
@@ -132,11 +142,15 @@ export default class ChatRoom extends Listenable {
         this.focusMucJid = null;
         this.noBridgeAvailable = false;
         this.options = options || {};
+
+        // 主持人
         this.moderator
             = new Moderator(this.roomjid, this.xmpp, this.eventEmitter, {
                 connection: this.xmpp.options,
                 conference: this.options
             });
+
+        // 默认启用Lobby
         if (typeof this.options.enableLobby === 'undefined' || this.options.enableLobby) {
             this.lobby = new Lobby(this);
         }
@@ -156,14 +170,18 @@ export default class ChatRoom extends Listenable {
     /* eslint-enable max-params */
 
     /**
-     *
+     * 初始化 PresenceMap ...
+     * 初始化节点 ..等等信息 ...
      */
     initPresenceMap(options = {}) {
         this.presMap.to = this.myroomjid;
+
+        // 指定  xmlns 命名空间
         this.presMap.xns = 'http://jabber.org/protocol/muc';
         this.presMap.nodes = [];
 
         if (options.statsId) {
+            // 加入一个 statsId
             this.presMap.nodes.push({
                 'tagName': 'stats-id',
                 'value': options.statsId
@@ -185,7 +203,7 @@ export default class ChatRoom extends Listenable {
 
         return new Promise(resolve => {
             this.options.disableFocus
-                && logger.info(`Conference focus disabled for ${this.roomjid}`);
+            && logger.info(`Conference focus disabled for ${this.roomjid}`);
 
             const preJoin
                 = this.options.disableFocus
@@ -205,26 +223,38 @@ export default class ChatRoom extends Listenable {
     }
 
     /**
-     *
+     * 这是否为一个加入房间的初始presence
      * @param fromJoin - Whether this is initial presence to join the room.
      */
     sendPresence(fromJoin) {
         const to = this.presMap.to;
 
+
+        // 如果没有连接 或者服务没有连接 或者没有to 或者 已经 还没有加入 并且不是第一个条初始化presence
         if (!this.connection || !this.connection.connected || !to || (!this.joined && !fromJoin)) {
             // Too early to send presence - not initialized
             return;
         }
 
+        // 创建Presence 元素( 设置to)
         const pres = $pres({ to });
 
+        // 这里表示进入房间 ...
         // xep-0045 defines: "including in the initial presence stanza an empty
         // <x/> element qualified by the 'http://jabber.org/protocol/muc'
         // namespace" and subsequent presences should not include that or it can
         // be considered as joining, and server can send us the message history
         // for the room on every presence
+        // xep-0045 定义: 包含初始化stanza 到一个空 的x元素(由 http://jabber.org/protocol/muc 限定的命名空间)
+        // 并且后续的presence 不应该包含这个   或者考虑加入请求 ,并且服务器能够根据每一个presence 给我们发送消息历史
+
+        // 如果MUC 服务从一个已经 加入的客户端上 接收到 包含x 标签的Presence
+        // note:当一个 MUC 服务从一个已经加入的客户端（由客户端的完整 JID 标识）接收到一个 <x/> 标记的连接节时，
+        // 服务应该假设客户端失去了同步，因此它应该发送完全相同的节到客户就好像它实际上刚刚加入了 MUC。服务器还可以根据接收到的加入状态向其他参与者发送状态更新。
+
         if (fromJoin) {
             if (this.replaceParticipant) {
+                // 增加一个子元素,除非提供了文本 ..
                 pres.c('flip_device').up();
             }
 
@@ -240,17 +270,24 @@ export default class ChatRoom extends Listenable {
             pres.up();
         }
 
+        //  一些扩展
         parser.json2packet(this.presMap.nodes, pres);
 
         // we store time we last synced presence state
         this.presenceSyncTime = Date.now();
 
         this.connection.send(pres);
+
+        // 如果是第一次加入
         if (fromJoin) {
             // XXX We're pressed for time here because we're beginning a complex
             // and/or lengthy conference-establishment process which supposedly
             // involves multiple RTTs. We don't have the time to wait for
             // Strophe to decide to send our IQ.
+            // XXX 我们在这里的时间紧迫，因为我们正在开始一个复杂的
+            // 和/或漫长的会议建立过程，据说
+            // 涉及多个RTT。我们没有时间等待
+            // Strophe决定发送我们的IQ。
             this.connection.flush();
         }
     }
@@ -261,8 +298,10 @@ export default class ChatRoom extends Listenable {
      */
     doLeave() {
         logger.log('do leave', this.myroomjid);
-        const pres = $pres({ to: this.myroomjid,
-            type: 'unavailable' });
+        const pres = $pres({
+            to: this.myroomjid,
+            type: 'unavailable'
+        });
 
         this.presMap.length = 0;
 
@@ -295,13 +334,13 @@ export default class ChatRoom extends Listenable {
                 type: 'get',
                 to: this.roomjid
             })
-                .c('query', { xmlns: Strophe.NS.DISCO_INFO });
+            .c('query', { xmlns: Strophe.NS.DISCO_INFO });
 
         this.connection.sendIQ(getInfo, result => {
             const locked
                 = $(result).find('>query>feature[var="muc_passwordprotected"]')
                     .length
-                    === 1;
+                === 1;
 
             if (locked !== this.locked) {
                 this.eventEmitter.emit(XMPPEvents.MUC_LOCK_CHANGED, locked);
@@ -367,25 +406,46 @@ export default class ChatRoom extends Listenable {
     }
 
     /**
-     *
+     * 创建一个非匿名房间 ..
      */
     createNonAnonymousRoom() {
         // http://xmpp.org/extensions/xep-0045.html#createroom-reserved
-
+        // 它会发送一个IQ 用来创建一个预留的房间 ..
+        // eslint-disable-next-line max-len
+        // The _whois configuration option specifies whether the room is non-anonymous (a value of "anyone") or semi-anonymous (a value of "moderators").
+        // 一般来说没有这个 ...
         if (this.options.disableDiscoInfo) {
             return;
         }
 
-        const getForm = $iq({ type: 'get',
-            to: this.roomjid })
+        // 创建一个iq请求 ...
+        // 这里是创建实时房间
+        // https://xmpp.org/extensions/xep-0045.html#createroom-instant
+        // The service MUST then unlock the room and allow other entities to join it.
+        const getForm = $iq({
+            type: 'get',
+            to: this.roomjid
+        })
             .c('query', { xmlns: 'http://jabber.org/protocol/muc#owner' })
-            .c('x', { xmlns: 'jabber:x:data',
-                type: 'submit' });
+            .c('x', {
+                xmlns: 'jabber:x:data',
+                type: 'submit'
+            });
+
+
+        // 首先是 用户给服务器发送了一个创建房间的请求 .,
+        // 如果房间还不存在，服务应该创建房间（根据当地有关房间创建的政策），将请求用户的裸 JID 分配为所有者，将所有者添加到房间，并确认房间创建成功通过发送以下形式的存在节
+        // 创建成功之后
+        // 然后  根据选择配置实时 房间还是预约房间
+        // 就是通过iq应答 ..
+        // 发送IQ
+
 
         this.connection.sendIQ(getForm, form => {
+            // 如果没有发现 ... 则需要调用错误(非匿名的房间是不支持的)
             if (!$(form).find(
-                    '>query>x[xmlns="jabber:x:data"]'
-                    + '>field[var="muc#roomconfig_whois"]').length) {
+                '>query>x[xmlns="jabber:x:data"]'
+                + '>field[var="muc#roomconfig_whois"]').length) {
                 const errmsg = 'non-anonymous rooms not supported';
 
                 GlobalOnErrorHandler.callErrorHandler(new Error(errmsg));
@@ -394,23 +454,42 @@ export default class ChatRoom extends Listenable {
                 return;
             }
 
-            const formSubmit = $iq({ to: this.roomjid,
-                type: 'set' })
+            // 当然也可以选择  不配置房间
+            // 这是一个 demo
+            /* <iq from='crone1@shakespeare.lit/desktop'
+                id='config2'
+                to='coven@chat.shakespeare.lit'
+                type='set'>
+                <query xmlns='http://jabber.org/protocol/muc#owner'>
+                    <x xmlns='jabber:x:data' type='cancel'/>
+                </query>
+            </iq>*/
+            // 如果有,则提交表单,需要设置一部分东西 ..
+            const formSubmit = $iq({
+                to: this.roomjid,
+                type: 'set'
+            })
                 .c('query', { xmlns: 'http://jabber.org/protocol/muc#owner' });
 
-            formSubmit.c('x', { xmlns: 'jabber:x:data',
-                type: 'submit' });
+            formSubmit.c('x', {
+                xmlns: 'jabber:x:data',
+                type: 'submit'
+            });
 
             formSubmit.c('field', { 'var': 'FORM_TYPE' })
                 .c('value')
                 .t('http://jabber.org/protocol/muc#roomconfig').up().up();
 
+            // 设置一下 who_is 为 anyone ..
+            // The _whois configuration option specifies whether the room is non-anonymous (a value of "anyone") or semi-anonymous (a value of "moderators").
             formSubmit.c('field', { 'var': 'muc#roomconfig_whois' })
                 .c('value').t('anyone').up().up();
 
+            // 然后直接发送提交..
             this.connection.sendIQ(formSubmit);
 
         }, error => {
+            // 获取房间配置错误 .. 直接提示 ..
             GlobalOnErrorHandler.callErrorHandler(error);
             logger.error('Error getting room configuration form: ', error);
         });
@@ -429,7 +508,7 @@ export default class ChatRoom extends Listenable {
     }
 
     /**
-     *
+     * 房间 Presence
      * @param pres
      */
     onPresence(pres) {
@@ -442,29 +521,40 @@ export default class ChatRoom extends Listenable {
         }
         let hasStatusUpdate = false;
         let hasVersionUpdate = false;
+
+        // 拿到x 元素
         const xElement
             = pres.getElementsByTagNameNS(
-                'http://jabber.org/protocol/muc#user', 'x')[0];
+            'http://jabber.org/protocol/muc#user', 'x')[0];
+
+        // 获取 item
         const mucUserItem
             = xElement && xElement.getElementsByTagName('item')[0];
 
+        // 获取flip_device
         member.isReplaceParticipant
             = pres.getElementsByTagName('flip_device').length;
 
+        // 获取 mucUserItem中的隶属关系
         member.affiliation
             = mucUserItem && mucUserItem.getAttribute('affiliation');
+
+        // 获取角色 .. role
         member.role = mucUserItem && mucUserItem.getAttribute('role');
 
         // Focus recognition
+        // 获取 jid
         const jid = mucUserItem && mucUserItem.getAttribute('jid');
 
         member.jid = jid;
+
+        // 判断是否为focus
         member.isFocus
             = jid && jid.indexOf(`${this.moderator.getFocusUserJid()}/`) === 0;
         member.isHiddenDomain
             = jid && jid.indexOf('@') > 0
-                && this.options.hiddenDomain
-                    === jid.substring(jid.indexOf('@') + 1, jid.indexOf('/'));
+            && this.options.hiddenDomain
+            === jid.substring(jid.indexOf('@') + 1, jid.indexOf('/'));
 
         this.eventEmitter.emit(XMPPEvents.PRESENCE_RECEIVED, {
             fromHiddenDomain: member.isHiddenDomain,
@@ -712,14 +802,14 @@ export default class ChatRoom extends Listenable {
             case 'nick':
                 if (!member.isFocus) {
                     const displayName
-                        = this.xmpp.options.displayJids
-                            ? Strophe.getResourceFromJid(from)
-                            : member.nick;
+                            = this.xmpp.options.displayJids
+                                ? Strophe.getResourceFromJid(from)
+                                : member.nick;
 
                     this.eventEmitter.emit(
-                        XMPPEvents.DISPLAY_NAME_CHANGED,
-                        from,
-                        displayName);
+                            XMPPEvents.DISPLAY_NAME_CHANGED,
+                            from,
+                            displayName);
                 }
                 break;
             case 'bridgeNotAvailable':
@@ -762,8 +852,8 @@ export default class ChatRoom extends Listenable {
                 if (status && status !== this.transcriptionStatus) {
                     this.transcriptionStatus = status;
                     this.eventEmitter.emit(
-                        XMPPEvents.TRANSCRIPTION_STATUS_CHANGED,
-                        status
+                            XMPPEvents.TRANSCRIPTION_STATUS_CHANGED,
+                            status
                     );
                 }
 
@@ -877,8 +967,10 @@ export default class ChatRoom extends Listenable {
      * @param elementName
      */
     sendMessage(message, elementName) {
-        const msg = $msg({ to: this.roomjid,
-            type: 'groupchat' });
+        const msg = $msg({
+            to: this.roomjid,
+            type: 'groupchat'
+        });
 
         // We are adding the message in a packet extension. If this element
         // is different from 'body', we add a custom namespace.
@@ -901,8 +993,10 @@ export default class ChatRoom extends Listenable {
      * @param elementName
      */
     sendPrivateMessage(id, message, elementName) {
-        const msg = $msg({ to: `${this.roomjid}/${id}`,
-            type: 'chat' });
+        const msg = $msg({
+            to: `${this.roomjid}/${id}`,
+            type: 'chat'
+        });
 
         // We are adding the message in packet. If this element is different
         // from 'body', we add our custom namespace for the same.
@@ -918,6 +1012,7 @@ export default class ChatRoom extends Listenable {
         this.eventEmitter.emit(
             XMPPEvents.SENDING_PRIVATE_CHAT_MESSAGE, message);
     }
+
     /* eslint-enable max-params */
 
     /**
@@ -925,8 +1020,10 @@ export default class ChatRoom extends Listenable {
      * @param subject
      */
     setSubject(subject) {
-        const msg = $msg({ to: this.roomjid,
-            type: 'groupchat' });
+        const msg = $msg({
+            to: this.roomjid,
+            type: 'groupchat'
+        });
 
         msg.c('subject', subject);
         this.connection.send(msg);
@@ -956,11 +1053,13 @@ export default class ChatRoom extends Listenable {
      * @param from
      */
     onPresenceUnavailable(pres, from) {
+
+        // 忽略 presence ??
         // ignore presence
         if ($(pres).find('>ignore[xmlns="http://jitsi.org/jitmeet/"]').length) {
             return true;
         }
-
+        // 房间摧毁 ??
         // room destroyed ?
         const destroySelect = $(pres).find('>x[xmlns="http://jabber.org/protocol/muc#user"]>destroy');
 
@@ -968,14 +1067,16 @@ export default class ChatRoom extends Listenable {
             let reason;
             const reasonSelect
                 = $(pres).find(
-                    '>x[xmlns="http://jabber.org/protocol/muc#user"]'
-                        + '>destroy>reason');
+                '>x[xmlns="http://jabber.org/protocol/muc#user"]'
+                + '>destroy>reason');
 
             if (reasonSelect.length) {
                 reason = reasonSelect.text();
             }
 
             this.eventEmitter.emit(XMPPEvents.MUC_DESTROYED, reason, destroySelect.attr('jid'));
+
+            // 尝试移除 muc
             this.connection.emuc.doLeave(this.roomjid);
 
             return true;
@@ -984,16 +1085,16 @@ export default class ChatRoom extends Listenable {
         // Status code 110 indicates that this notification is "self-presence".
         const isSelfPresence
             = $(pres)
-                .find(
-                    '>x[xmlns="http://jabber.org/protocol/muc#user"]>'
-                        + 'status[code="110"]')
-                .length;
+            .find(
+                '>x[xmlns="http://jabber.org/protocol/muc#user"]>'
+                + 'status[code="110"]')
+            .length;
         const isKick
             = $(pres)
-                .find(
-                    '>x[xmlns="http://jabber.org/protocol/muc#user"]'
-                        + '>status[code="307"]')
-                .length;
+            .find(
+                '>x[xmlns="http://jabber.org/protocol/muc#user"]'
+                + '>status[code="307"]')
+            .length;
         const membersKeys = Object.keys(this.members);
         const isReplaceParticipant = $(pres).find('flip_device').length;
 
@@ -1109,7 +1210,7 @@ export default class ChatRoom extends Listenable {
             if ($(msg).find('>x[xmlns="http://jabber.org/protocol/muc#user"]>status[code="104"]').length) {
                 this.discoRoomInfo();
             } else if ((invite = $(msg).find('>x[xmlns="http://jabber.org/protocol/muc#user"]>invite'))
-                        && invite.length) {
+                && invite.length) {
                 const passwordSelect = $(msg).find('>x[xmlns="http://jabber.org/protocol/muc#user"]>password');
                 let password;
 
@@ -1141,10 +1242,10 @@ export default class ChatRoom extends Listenable {
         if (txt) {
             if (type === 'chat') {
                 this.eventEmitter.emit(XMPPEvents.PRIVATE_MESSAGE_RECEIVED,
-                        from, txt, this.myroomjid, stamp);
+                    from, txt, this.myroomjid, stamp);
             } else if (type === 'groupchat') {
                 this.eventEmitter.emit(XMPPEvents.MESSAGE_RECEIVED,
-                        from, txt, this.myroomjid, stamp);
+                    from, txt, this.myroomjid, stamp);
             }
         }
     }
@@ -1156,19 +1257,19 @@ export default class ChatRoom extends Listenable {
      */
     onPresenceError(pres, from) {
         if ($(pres)
-                .find(
-                    '>error[type="auth"]'
-                        + '>not-authorized['
-                        + 'xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"]')
-                .length) {
+            .find(
+                '>error[type="auth"]'
+                + '>not-authorized['
+                + 'xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"]')
+            .length) {
             logger.log('on password required', from);
             this.eventEmitter.emit(XMPPEvents.PASSWORD_REQUIRED);
         } else if ($(pres)
-                .find(
-                    '>error[type="cancel"]'
-                        + '>not-allowed['
-                        + 'xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"]')
-                .length) {
+            .find(
+                '>error[type="cancel"]'
+                + '>not-allowed['
+                + 'xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"]')
+            .length) {
             const toDomain = Strophe.getDomainFromJid(pres.getAttribute('to'));
 
             if (toDomain === this.xmpp.options.hosts.anonymousdomain) {
@@ -1226,13 +1327,13 @@ export default class ChatRoom extends Listenable {
             to: this.roomjid,
             type: 'set'
         })
-        .c('query', { xmlns: 'http://jabber.org/protocol/muc#admin' })
-        .c('item', {
-            affiliation,
-            jid: Strophe.getBareJidFromJid(jid)
-        })
-        .c('reason').t(`Your affiliation has been changed to '${affiliation}'.`)
-        .up().up().up();
+            .c('query', { xmlns: 'http://jabber.org/protocol/muc#admin' })
+            .c('item', {
+                affiliation,
+                jid: Strophe.getBareJidFromJid(jid)
+            })
+            .c('reason').t(`Your affiliation has been changed to '${affiliation}'.`)
+            .up().up().up();
 
         this.connection.sendIQ(
             grantIQ,
@@ -1246,11 +1347,15 @@ export default class ChatRoom extends Listenable {
      * @param reason
      */
     kick(jid, reason = 'You have been kicked.') {
-        const kickIQ = $iq({ to: this.roomjid,
-            type: 'set' })
+        const kickIQ = $iq({
+            to: this.roomjid,
+            type: 'set'
+        })
             .c('query', { xmlns: 'http://jabber.org/protocol/muc#admin' })
-            .c('item', { nick: Strophe.getResourceFromJid(jid),
-                role: 'none' })
+            .c('item', {
+                nick: Strophe.getResourceFromJid(jid),
+                role: 'none'
+            })
             .c('reason').t(reason).up().up().up();
 
         this.connection.sendIQ(
@@ -1278,18 +1383,18 @@ export default class ChatRoom extends Listenable {
                 .c('query', { xmlns: 'http://jabber.org/protocol/muc#owner' }),
             res => {
                 if ($(res)
-                        .find(
-                            '>query>x[xmlns="jabber:x:data"]'
-                                + '>field[var="muc#roomconfig_roomsecret"]')
-                        .length) {
+                    .find(
+                        '>query>x[xmlns="jabber:x:data"]'
+                        + '>field[var="muc#roomconfig_roomsecret"]')
+                    .length) {
                     const formsubmit
                         = $iq({
                             to: this.roomjid,
                             type: 'set'
                         })
-                            .c('query', {
-                                xmlns: 'http://jabber.org/protocol/muc#owner'
-                            });
+                        .c('query', {
+                            xmlns: 'http://jabber.org/protocol/muc#owner'
+                        });
 
                     formsubmit.c('x', {
                         xmlns: 'jabber:x:data',
@@ -1309,7 +1414,7 @@ export default class ChatRoom extends Listenable {
                         .up();
                     formsubmit
                         .c('field',
-                             { 'var': 'muc#roomconfig_passwordprotectedroom' })
+                            { 'var': 'muc#roomconfig_passwordprotectedroom' })
                         .c('value')
                         .t(key === null || key.length === 0 ? '0' : '1')
                         .up()
@@ -1370,18 +1475,21 @@ export default class ChatRoom extends Listenable {
                     this.xmpp.connection.sendIQ(
                         $iq({
                             to: this.roomjid,
-                            type: 'set' })
-                        .c('query', {
-                            xmlns: 'http://jabber.org/protocol/muc#admin' })
-                        .c('item', {
-                            'affiliation': 'member',
-                            'jid': Strophe.getBareJidFromJid(m.jid)
-                        }).up().up());
+                            type: 'set'
+                        })
+                            .c('query', {
+                                xmlns: 'http://jabber.org/protocol/muc#admin'
+                            })
+                            .c('item', {
+                                'affiliation': 'member',
+                                'jid': Strophe.getBareJidFromJid(m.jid)
+                            }).up().up());
                 }
             });
         }
 
-        const errorCallback = onError ? onError : () => {}; // eslint-disable-line no-empty-function
+        const errorCallback = onError ? onError : () => {
+        }; // eslint-disable-line no-empty-function
 
         this.xmpp.connection.sendIQ(
             $iq({
@@ -1448,6 +1556,8 @@ export default class ChatRoom extends Listenable {
 
     /**
      * Adds the key to the presence map, overriding any previous value.
+     *
+     * 增加一个key到presence Map中, 覆盖任何前面的值 ..
      * @param key The key to add or replace.
      * @param values The new values.
      * @returns {boolean|null} <tt>true</tt> if the operation succeeded or <tt>false</tt> when no add or replace was
@@ -1456,13 +1566,17 @@ export default class ChatRoom extends Listenable {
     addOrReplaceInPresence(key, values) {
         values.tagName = key;
 
+        // 获取匹配的节点 ...
         const matchingNodes = this.presMap.nodes.filter(node => key === node.tagName);
 
         // if we have found just one, let's check is it the same
+        // 如果匹配的节点只有一个 .. 判断是否相等 ...
+        // 根据lodash 进行判断 (两个简单对象是否逻辑相同,不一定是同一个对象)
         if (matchingNodes.length === 1 && isEqual(matchingNodes[0], values)) {
             return false;
         }
 
+        // 先移除,然后推入 ..
         this.removeFromPresence(key);
         this.presMap.nodes.push(values);
         this.presenceUpdateTime = Date.now();
@@ -1482,6 +1596,7 @@ export default class ChatRoom extends Listenable {
 
     /**
      * Removes a key from the presence map.
+     * 先移除这些presence 节点 ...
      * @param key
      */
     removeFromPresence(key) {
@@ -1747,8 +1862,10 @@ export default class ChatRoom extends Listenable {
     muteParticipant(jid, mute, mediaType) {
         logger.info('set mute', mute, jid);
         const iqToFocus = $iq(
-            { to: this.focusMucJid,
-                type: 'set' })
+            {
+                to: this.focusMucJid,
+                type: 'set'
+            })
             .c('mute', {
                 xmlns: `http://jitsi.org/jitmeet/${mediaType}`,
                 jid

@@ -39,9 +39,9 @@ function createExpBackoffTimer(step) {
 /* eslint-disable max-params */
 
 /**
- *
+ * 调节者(所有者)
  * @param roomName
- * @param xmpp
+ * @param {XMPP} xmpp
  * @param emitter
  * @param options
  */
@@ -57,6 +57,8 @@ export default function Moderator(roomName, xmpp, emitter, options) {
 
     // Whether SIP gateway (jigasi) support is enabled. This is set
     // based on conference properties received in presence.
+
+    // 基于presence 中接受的会议属性设置进行处理 ...
     this.sipGatewayEnabled = false;
 
     this.eventEmitter = emitter;
@@ -122,19 +124,23 @@ Moderator.prototype.getFocusUserJid = function() {
     return this.focusUserJid;
 };
 
+// 获取 focus 组件
 Moderator.prototype.getFocusComponent = function() {
     // Get focus component address
+    // 其实就是看 focus 组件配置地址
     let focusComponent = this.options.connection.hosts.focus;
 
     // If not specified use default:  'focus.domain'
 
     if (!focusComponent) {
+        // 如果没有,根据  hosts.domain 进行配置
         focusComponent = `focus.${this.options.connection.hosts.domain}`;
     }
 
     return focusComponent;
 };
 
+// 创建 conference IQ
 Moderator.prototype.createConferenceIq = function() {
     // Generate create conference IQ
     const elem = $iq({ to: this.getFocusComponent(),
@@ -142,6 +148,8 @@ Moderator.prototype.createConferenceIq = function() {
 
     // Session Id used for authentication
     const { sessionId } = Settings;
+
+    // 随机生成的机器码
     const machineUID = Settings.machineId;
     const config = this.options.conference;
 
@@ -206,6 +214,10 @@ Moderator.prototype.createConferenceIq = function() {
     // react/features/rtcstats/functions.js in jitsi-meet). The server-side
     // components default to true to match the pre-existing behavior so we only
     // signal if false.
+
+    // 这个标志决定 是否桥也包括到这个call 到 它的rtcstats 报道中 ..
+    // 如果站点管理者 没有设置这个flag到config.js ,默认关闭 ...
+    // 服务端组件会正确的匹配之前的行为,因此我们总是在false 情况下发送信号 ..
     const rtcstatsEnabled = this.options.conference?.analytics?.rtcstatsEnabled ?? false;
 
     if (!rtcstatsEnabled) {
@@ -222,9 +234,11 @@ Moderator.prototype.createConferenceIq = function() {
         // Even though AppID and AppSecret may be specified, the integration
         // of callstats.io may be disabled because of globally-disallowed
         // requests to any third parties.
+        // 即使 appId 以及 AppSecret 被指定,这个callstats.io的集成也许被 禁用(因为 全局禁止第三方 请求)
         || disableThirdPartyRequests === true;
 
     // since the default is true across all the server-side components, only signal if false.
+    // 在所有服务端组件上因此默认为 true,仅仅为false,发送 信号  ...
     if (callstatsDisabled) {
         elem.c(
             'property', {
@@ -242,16 +256,19 @@ Moderator.prototype.parseSessionId = function(resultIq) {
     // eslint-disable-next-line newline-per-chained-call
     const sessionId = $(resultIq).find('conference').attr('session-id');
 
+    // 有可能没有获取到sessionId
     if (sessionId) {
         logger.info(`Received sessionId:  ${sessionId}`);
         Settings.sessionId = sessionId;
     }
 };
 
+// 设置配置选项
 Moderator.prototype.parseConfigOptions = function(resultIq) {
     // eslint-disable-next-line newline-per-chained-call
     this.setFocusUserJid($(resultIq).find('conference').attr('focusjid'));
 
+    // 是否启用了认证
     const authenticationEnabled
         = $(resultIq).find(
             '>conference>property'
@@ -259,6 +276,7 @@ Moderator.prototype.parseConfigOptions = function(resultIq) {
 
     logger.info(`Authentication enabled: ${authenticationEnabled}`);
 
+    // 是否有外部认证 ...
     this.externalAuthEnabled = $(resultIq).find(
         '>conference>property'
             + '[name=\'externalAuth\'][value=\'true\']').length > 0;
@@ -268,9 +286,11 @@ Moderator.prototype.parseConfigOptions = function(resultIq) {
 
     if (!this.externalAuthEnabled) {
         // We expect to receive sessionId in 'internal' authentication mode
+        // 我们期待在internal 认证模式中获取一个sessionId
         this.parseSessionId(resultIq);
     }
 
+    // 认证身份
     // eslint-disable-next-line newline-per-chained-call
     const authIdentity = $(resultIq).find('>conference').attr('identity');
 
@@ -288,21 +308,26 @@ Moderator.prototype.parseConfigOptions = function(resultIq) {
 };
 
 // FIXME We need to show the fact that we're waiting for the focus to the user
+// 我们需要展示事实(等待 focus的用户)
 // (or that the focus is not available)
+// 或者focus 不可用
 /**
  * Allocates the conference focus.
- *
+ * 分配 会议焦点
  * @param {Function} callback - the function to be called back upon the
  * successful allocation of the conference focus
  * @returns {Promise} - Resolved when Jicofo allows to join the room. It's never
  * rejected and it'll keep on pinging Jicofo forever.
  */
 Moderator.prototype.allocateConferenceFocus = function() {
+    // 成功分配focus 之后
     return new Promise(resolve => {
         // Try to use focus user JID from the config
+        // 设置focus JID
         this.setFocusUserJid(this.options.connection.focusUserJid);
 
         // Send create conference IQ
+        // 发送 conference IQ
         this.connection.sendIQ(
             this.createConferenceIq(),
             result => this._allocateConferenceFocusSuccess(result, resolve),
@@ -312,6 +337,7 @@ Moderator.prototype.allocateConferenceFocus = function() {
         // and/or lengthy conference-establishment process which supposedly
         // involves multiple RTTs. We don't have the time to wait for Strophe to
         // decide to send our IQ.
+        // 在此时将所有的即将流出的数据... 因为我们正在开始一个负载的或者长期的会议建立过程(可能涉及到多个RTT),我们没有时间等待Strophe 去决定发送我们的IQ  ...
         this.connection.flush();
     });
 };
@@ -407,6 +433,8 @@ Moderator.prototype._allocateConferenceFocusError = function(error, callback) {
  * Invoked by {@link #allocateConferenceFocus} upon its request receiving a
  * success (i.e. non-error) result.
  *
+ * 如果分配成功
+ *
  * @param result - the success (i.e. non-error) result of the request that
  * {@link #allocateConferenceFocus} sent
  * @param {Function} callback - the function to be called back upon the
@@ -416,6 +444,7 @@ Moderator.prototype._allocateConferenceFocusSuccess = function(
         result,
         callback) {
     // Setup config options
+    // 设置配置选项
     this.parseConfigOptions(result);
 
     // Reset the error timeout (because we haven't failed here).

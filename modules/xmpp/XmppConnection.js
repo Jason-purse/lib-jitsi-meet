@@ -12,6 +12,7 @@ const logger = getLogger(__filename);
 
 /**
  * The lib-jitsi-meet layer for {@link Strophe.Connection}.
+ *  Strophe.Connection的  lib-jitsi-meet 层
  */
 export default class XmppConnection extends Listenable {
     /**
@@ -51,25 +52,43 @@ export default class XmppConnection extends Listenable {
      * if missing the serviceUrl url will be used.
      * @param {Object} [options.xmppPing] - The xmpp ping settings.
      */
-    constructor({ enableWebsocketResume, websocketKeepAlive, websocketKeepAliveUrl, serviceUrl, shard, xmppPing }) {
+    constructor({
+        enableWebsocketResume,
+        websocketKeepAlive,
+        websocketKeepAliveUrl,
+        serviceUrl,
+        shard,
+        xmppPing
+    }) {
         super();
+
+        // 设置一些选项
         this._options = {
             enableWebsocketResume: typeof enableWebsocketResume === 'undefined' ? true : enableWebsocketResume,
             pingOptions: xmppPing,
             shard,
+
+            // websocketKeepAlive 事件周期
             websocketKeepAlive: typeof websocketKeepAlive === 'undefined' ? 60 * 1000 : Number(websocketKeepAlive),
             websocketKeepAliveUrl
         };
 
+        // 通过 xmpp -websocket 进行连接 ...
         this._stropheConn = new Strophe.Connection(serviceUrl);
+
+        // 使用WebSocket ..
         this._usesWebsocket = serviceUrl.startsWith('ws:') || serviceUrl.startsWith('wss:');
 
         // The default maxRetries is 5, which is too long.
         this._stropheConn.maxRetries = 3;
 
+        // 最近成功跟踪器 ...
         this._rawInputTracker = new LastSuccessTracker();
+
+        // 开始跟踪
         this._rawInputTracker.startTracking(this, this._stropheConn);
 
+        // 流管理
         this._resumeTask = new ResumeTask(this._stropheConn);
 
         /**
@@ -78,9 +97,11 @@ export default class XmppConnection extends Listenable {
          * @property {function} resolve - The resolve method of the deferred Promise.
          * @property {function} reject - The reject method of the deferred Promise.
          * @property {number} timeout - The ID of the timeout task that needs to be cleared, before sending the IQ.
+         * 在发送IQ之前需要清理的超时任务 ...
          */
         /**
          * Deferred IQs to be sent upon reconnect.
+         * 在重连之后发送的延迟IQs..
          * @type {Array<DeferredSendIQ>}
          * @private
          */
@@ -88,15 +109,22 @@ export default class XmppConnection extends Listenable {
 
         // Ping plugin is mandatory for the Websocket mode to work correctly. It's used to detect when the connection
         // is broken (WebSocket/TCP connection not closed gracefully).
+
+        // ping 插件是强制加入到 websocket 模式下进行正常工作 ... 它被用来检测 连接是否被终端(websocket / tcp 连接没有优雅的关闭)
         this.addConnectionPlugin(
             'ping',
             new PingConnectionPlugin({
+                // 获取上次服务器响应成功的时间 ...
                 getTimeSinceLastServerResponse: () => this.getTimeSinceLastSuccess(),
+
+                // 当ping 阈值溢出时 操作 .. 发生错误 ..
                 onPingThresholdExceeded: () => this._onPingErrorThresholdExceeded(),
                 pingOptions: xmppPing
             }));
 
         // tracks whether this is the initial connection or a reconnect
+
+        // 跟踪这是一个初始化连接还是  重连 ..
         this._oneSuccessfulConnect = false;
     }
 
@@ -225,6 +253,8 @@ export default class XmppConnection extends Listenable {
     /**
      * Adds a connection plugin to this instance.
      *
+     * 增加一个连接插件到这个实例上 ...
+     *
      * @param {string} name - The name of the plugin or rather a key under which it will be stored on this connection
      * instance.
      * @param {ConnectionPluginListenable} plugin - The plugin to add.
@@ -313,10 +343,12 @@ export default class XmppConnection extends Listenable {
     /**
      * Clears the list of IQs and rejects deferred Promises with an error.
      *
+     * 清理 IQ列表 .. 由于错误 拒绝的promise ...
      * @private
      */
     _clearDeferredIQs() {
         for (const deferred of this._deferredIQs) {
+            // 清理 .
             deferred.reject(new Error('disconnect'));
         }
         this._deferredIQs = [];
@@ -348,7 +380,7 @@ export default class XmppConnection extends Listenable {
 
     /**
      * See {@link Strophe.Connection.flush}.
-     *
+     * Immediately send any pending outgoing data.
      * @returns {void}
      */
     flush(...args) {
@@ -446,6 +478,8 @@ export default class XmppConnection extends Listenable {
                 if (responseShard !== shard) {
                     logger.error(
                         `Detected that shard changed from ${shard} to ${responseShard}`);
+
+                    // shard 改变,弹射事件
                     this.eventEmitter.emit(XmppConnection.Events.CONN_SHARD_CHANGED);
                 }
             })
@@ -456,15 +490,18 @@ export default class XmppConnection extends Listenable {
 
     /**
      * Goes over the list of {@link DeferredSendIQ} tasks and sends them.
-     *
+     * 处理延迟的 IQ 任务 并发送它
      * @private
      * @returns {void}
      */
     _processDeferredIQs() {
         for (const deferred of this._deferredIQs) {
+            // 如果iq存在
             if (deferred.iq) {
+                // 清理掉它的timeout
                 clearTimeout(deferred.timeout);
 
+                // 然后超时时间 相应的延长 ..
                 const timeLeft = Date.now() - deferred.start;
 
                 this.sendIQ(
@@ -488,6 +525,8 @@ export default class XmppConnection extends Listenable {
         if (!this.connected) {
             throw new Error('Not connected');
         }
+
+        // 调用此函数将数据推送到发送队列以通过线路发送出去。每当向 BOSH 服务器发送请求时，都会发送所有待处理的数据并刷新队列。
         this._stropheConn.send(stanza);
     }
 
@@ -515,9 +554,14 @@ export default class XmppConnection extends Listenable {
      * Sends an IQ immediately if connected or puts it on the send queue otherwise(in contrary to other send methods
      * which would fail immediately if disconnected).
      *
+     * 发送IQ 的一个封装(如果已经连接了,直接发送IQ） 或者将它放置在发送队列中 ..(对比其他发送方法 - 在取消连接之后可能会立即失败) ...
+     * 形成对比 ...
+     *
      * @param {Element} iq - The IQ to send.
      * @param {number} timeout - How long to wait for the response. The time when the connection is reconnecting is
      * included, which means that the IQ may never be sent and still fail with a timeout.
+     *
+     * 标识在重连阶段,如果超时时间结束之后 还没有连接上 就不再发送 ...
      */
     sendIQ2(iq, { timeout }) {
         return new Promise((resolve, reject) => {
@@ -549,7 +593,7 @@ export default class XmppConnection extends Listenable {
 
     /**
      * Called by the ping plugin when ping fails too many times.
-     *
+     * 当失败太多次, 调用此方法 ... 关闭websocket ...
      * @returns {void}
      */
     _onPingErrorThresholdExceeded() {
@@ -619,7 +663,9 @@ export default class XmppConnection extends Listenable {
      * Tries to use stream management plugin to resume dropped XMPP connection. The streamManagement plugin clears
      * the resume token if any connection error occurs which would put it in unrecoverable state, so as long as
      * the token is present it means the connection can be resumed.
-     *
+     * 尝试使用流管理插件恢复 挂掉的xmpp 连接 ...
+     * 这个流管理插件 清理 resume token(如果任何一个连接错误发生)  - 将它置为一个无法恢复的状态 ...
+     * // 因此只要token 存在,连接就可以被恢复  ...
      * @private
      * @returns {boolean}
      */
@@ -628,6 +674,7 @@ export default class XmppConnection extends Listenable {
         const resumeToken = streamManagement && streamManagement.getResumeToken();
 
         if (resumeToken) {
+            // 调度任务
             this._resumeTask.schedule();
 
             return true;

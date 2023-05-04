@@ -1,5 +1,5 @@
-import { jitsiLocalStorage } from '@jitsi/js-utils';
-import { getLogger } from '@jitsi/logger';
+import {jitsiLocalStorage} from '@jitsi/js-utils';
+import {getLogger} from '@jitsi/logger';
 
 const logger = getLogger(__filename);
 
@@ -51,13 +51,16 @@ export default {
      */
     get machineId() {
         if (!_machineId) {
+            // 收费id
             const amDid = this._storage.getItem('billingId');
 
             _machineId = amDid || this._storage.getItem('jitsiMeetId');
 
             if (amDid) {
+                // 拿取 jitsiMeetId
                 this._storage.setItem('jitsiMeetId', amDid);
             } else if (!_machineId) {
+                // 机器码 ...
                 _machineId = generateJitsiMeetId();
                 this._storage.setItem('jitsiMeetId', _machineId);
             }
@@ -73,6 +76,8 @@ export default {
     get sessionId() {
         // We may update sessionId in localStorage from another JitsiConference
         // instance and that's why we should always re-read it.
+
+        // 从其他的JitsiConference 更新sessionId  那就是为什么我们应该重新读取它 ...
         return this._storage.getItem('sessionId');
     },
 

@@ -19,8 +19,13 @@ class StropheLogger extends ConnectionPlugin {
      * @param connection
      */
     init(connection) {
+        // 增强连接功能 .. ...
         super.init(connection);
+
+        // 接受连接接受xml 数据
         this.connection.rawInput = this.logIncoming.bind(this);
+
+        // 接受  发送到连接的数据
         this.connection.rawOutput = this.logOutgoing.bind(this);
     }
 
@@ -45,5 +50,6 @@ class StropheLogger extends ConnectionPlugin {
  *
  */
 export default function() {
+    // 增加一个连接插件 ..
     Strophe.addConnectionPlugin('logger', new StropheLogger());
 }

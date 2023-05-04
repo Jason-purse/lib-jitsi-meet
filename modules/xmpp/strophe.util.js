@@ -47,13 +47,17 @@ const lastErrorStatusRegExpr
  */
 export default function() {
 
+    // 日志 ...
     Strophe.log = function(level, msg) {
         // Our global handler reports uncaught errors to the stats which may
         // interpret those as partial call failure.
         // Strophe log entry about secondary request timeout does not mean that
         // it's a final failure(the request will be restarted), so we lower it's
         // level here to a warning.
+        // 日志实现
         logger.trace('Strophe', level, msg);
+
+        // 有些请求会进行重新请求,所以  降低 日志级别为warning ..
         if (typeof msg === 'string'
                 && msg.indexOf('Request ') !== -1
                 && msg.indexOf('timed out (secondary), restarting') !== -1) {
@@ -95,7 +99,9 @@ export default function() {
 
     /**
      * Returns error status (HTTP error code) of the last BOSH request.
+     * 返回最新Bosh 请求的 错误状态(http 错误状态)
      *
+     * 0标识 未知 或者已知  有一个hack ...
      * @return {number} HTTP error code, '0' for unknown or "god knows what"
      * (this is a hack).
      */

@@ -5,4 +5,6 @@ declare interface Strophe {
   getTimeSinceLastSuccess: () => number | null;
 }
 
+// _default 默认实现就是 function(无名函数)
+// 一种约定
 export default function _default(): void;

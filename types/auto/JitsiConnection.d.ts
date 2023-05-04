@@ -13,11 +13,14 @@ export default class JitsiConnection {
     /**
      * Creates a new connection object for the Jitsi Meet server side video
      * conferencing service. Provides access to the JitsiConference interface.
+     *
+     * 创建一个新的连接对象 - 针对jitsi meet 服务器端的视频会议服务 ..
+     * 提供对JitsiConference 接口的访问 ...
      * @param appID identification for the provider of Jitsi Meet video conferencing
-     * services.
-     * @param token the JWT token used to authenticate with the server(optional)
+     * services. jitsi meet 视频会议服务的提供器标识 ..
+     * @param token the JWT token used to authenticate with the server(optional)  服务器用来认证的jwt 令牌 ..
      * @param options Object with properties / settings related to connection with
-     * the server.
+     * the server. 和服务器相关的连接的属性或者设置对象 ...
      * @constructor
      */
     constructor(appID: any, token: any, options: any);

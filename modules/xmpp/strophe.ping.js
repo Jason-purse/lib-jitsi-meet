@@ -29,6 +29,7 @@ const PING_DEFAULT_THRESHOLD = 2;
  * XEP-0199 ping plugin.
  *
  * Registers "urn:xmpp:ping" namespace under Strophe.NS.PING.
+ * ping 插件,注册 urn:xmpp:ping 命名空间在Strophe.NS.PING  下 ...
  */
 export default class PingConnectionPlugin extends ConnectionPlugin {
     /**
@@ -64,12 +65,14 @@ export default class PingConnectionPlugin extends ConnectionPlugin {
      */
     init(connection) {
         super.init(connection);
+
+        // 扩展新的命名空间
         Strophe.addNamespace('PING', 'urn:xmpp:ping');
     }
 
     /* eslint-disable max-params */
 
-    /**
+    /** 发送ping - 通过给定的jid
      * Sends "ping" to given <tt>jid</tt>
      * @param jid the JID to which ping request will be sent.
      * @param success callback called on success.
@@ -80,12 +83,17 @@ export default class PingConnectionPlugin extends ConnectionPlugin {
     ping(jid, success, error, timeout) {
         this._addPingExecutionTimestamp();
 
+        // 创建一个iq xml 元素
+        // 需要from / type=get / to = jid
         const iq = $iq({
             type: 'get',
             to: jid
         });
 
+        //  child 函数 设置object attributes
         iq.c('ping', { xmlns: Strophe.NS.PING });
+
+        // 然后直接发送IQ2 即可
         this.connection.sendIQ2(iq, { timeout })
             .then(success, error);
     }

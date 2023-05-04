@@ -8,6 +8,7 @@ const logger = getLogger(__filename);
 
 /**
  * The AVModeration logic.
+ * AVModeration 逻辑
  */
 export default class AVModeration {
 

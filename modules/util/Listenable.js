@@ -4,6 +4,9 @@ import EventEmitter from 'events';
  * The class implements basic event operations - add/remove listener.
  * NOTE: The purpose of the class is to be extended in order to add
  * this functionality to other classes.
+ *
+ * 基本事件操作的类实现 (增加/移除事件)
+ * 注意 这个类的目的是用于继承  从而增加  事件处理能力 ..
  */
 export default class Listenable {
     /**

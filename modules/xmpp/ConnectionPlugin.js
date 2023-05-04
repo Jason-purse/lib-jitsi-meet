@@ -2,6 +2,7 @@ import Listenable from '../util/Listenable';
 
 /**
  * Creates ConnectionPlugin class that extends the passed class.
+ * 创建一个基层与传递的类的ConnectionPlugin ...
  * @param {Class} base the definition of the class that will be extended by
  * ConnectionPlugin
  */

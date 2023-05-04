@@ -37,7 +37,7 @@ const FAILURE_REGEX = /<failure.*><not-allowed\/><text>(.*)<\/text><\/failure>/g
  * @param {string} [options.token] - JWT token used for authentication(JWT authentication module must be enabled in
  * Prosody).
  * @param {string} options.serviceUrl - The service URL for XMPP connection.
- * @param {string} options.shard - The shard where XMPP connection initially landed.
+ * @param {string} options.shard - The shard where XMPP connection initially landed.   XMPP 连接最初登陆的分片(感觉  telnet 模式下可能存在)
  * @param {string} options.enableWebsocketResume - True to enable stream resumption.
  * @param {number} [options.websocketKeepAlive] - See {@link XmppConnection} constructor.
  * @param {number} [options.websocketKeepAliveUrl] - See {@link XmppConnection} constructor.
@@ -46,6 +46,8 @@ const FAILURE_REGEX = /<failure.*><not-allowed\/><text>(.*)<\/text><\/failure>/g
  */
 function createConnection({
     enableWebsocketResume,
+
+    // 默认就是bosh
     serviceUrl = '/http-bind',
     shard,
     token,
@@ -59,6 +61,7 @@ function createConnection({
         serviceUrl += `${serviceUrl.indexOf('?') === -1 ? '?' : '&'}token=${token}`;
     }
 
+    // 构建新的Xmpp 连接
     return new XmppConnection({
         enableWebsocketResume,
         serviceUrl,
@@ -73,9 +76,12 @@ function createConnection({
  * Initializes Strophe plugins that need to work with Strophe.Connection directly rather than the lib-jitsi-meet's
  * {@link XmppConnection} wrapper.
  *
+ * 初始化strophe 插件,  能够直接和Strophe.Connection上进行工作,而不是lib-jitsi-meet的XmppConnection包装器工作
+ *
  * @returns {void}
  */
 function initStropheNativePlugins() {
+    // 工具类的一些方法增强 ..
     initStropheUtil();
     initStropheLogger();
 }
@@ -83,6 +89,7 @@ function initStropheNativePlugins() {
 // FIXME: remove once we have a default config template. -saghul
 /**
  * A list of ice servers to use by default for P2P.
+ * 默认端到端的  P2P 的ice 服务器 ..
  */
 export const DEFAULT_STUN_SERVERS = [
     { urls: 'stun:meet-jit-si-turnrelay.jitsi.net:443' }
@@ -93,6 +100,9 @@ export const DEFAULT_STUN_SERVERS = [
  * payload from another endpoint.
  * If the json-message of a chat message contains a valid JSON object, and
  * the JSON has this key, then it is a valid json-message to be sent.
+ *
+ * 此字段的名称  用来识别 一个聊天信息 作为 来自另一个端点的JSON 负载 ..
+ * 如果聊天消息的json 消息包含了一个有效的JSON 对象 。。 并且json 还包含了此key ,那么他就是一个有效的json -message (并设置)
  */
 export const JITSI_MEET_MUC_TYPE = 'type';
 
@@ -110,7 +120,7 @@ export const FEATURE_JIGASI = 'http://jitsi.org/protocol/jigasi';
 export const FEATURE_E2EE = 'https://jitsi.org/meet/e2ee';
 
 /**
- *
+ * XMPP ...
  */
 export default class XMPP extends Listenable {
     /**
@@ -134,30 +144,41 @@ export default class XMPP extends Listenable {
         this.connection = null;
         this.disconnectInProgress = false;
         this.connectionTimes = {};
+
+        // config 中的配置, 指定了Muc的地址..
         this.options = options;
         this.token = token;
         this.authenticatedUser = false;
 
+        // 初始化strophe 相关的一些插件 ...
         initStropheNativePlugins();
 
+        // ping  ...
         const xmppPing = options.xmppPing || {};
 
         // let's ping the main domain (in case a guest one is used for the connection)
+        // 游客所使用的连接的情况 ... 设置ping 的主要域
         xmppPing.domain = options.hosts.domain;
 
+        // 创建的XmppConnection ...  本质上包装了一个StropheConnection ...
         this.connection = createConnection({
             enableWebsocketResume: options.enableWebsocketResume,
 
             // FIXME remove deprecated bosh option at some point
+            // 在某个时候需要移除不建议的bosh ...
             serviceUrl: options.serviceUrl || options.bosh,
             token,
             websocketKeepAlive: options.websocketKeepAlive,
             websocketKeepAliveUrl: options.websocketKeepAliveUrl,
             xmppPing,
+
+            // 共享的信息
             shard: options.deploymentInfo?.shard
         });
 
+        // 连接创建完毕, 转发shard 改变事件 ..
         // forwards the shard changed event
+        // 绑定这个事件
         this.connection.on(XmppConnection.Events.CONN_SHARD_CHANGED, () => {
             /* eslint-disable camelcase */
             const details = {
@@ -167,6 +188,7 @@ export default class XMPP extends Listenable {
             };
             /* eslint-enable camelcase */
 
+            // 然后根据此事件弹射器 进行弹射
             this.eventEmitter.emit(
                 JitsiConnectionEvents.CONNECTION_FAILED,
                 JitsiConnectionErrors.OTHER_ERROR,
@@ -175,6 +197,7 @@ export default class XMPP extends Listenable {
                 details);
         });
 
+        // 初始化 strophePlugins
         this._initStrophePlugins();
 
         this.caps = new Caps(this.connection, /* clientNode */ 'https://jitsi.org/jitsi-meet');
@@ -662,19 +685,24 @@ export default class XMPP extends Listenable {
 
         // There are cases (when using subdomain) where muc can hold an uppercase part
         let roomjid = `${this.getRoomJid(roomName, domain)}/`;
+
+        // 如果有密码表示认证的用户
         const mucNickname = onCreateResource
             ? onCreateResource(this.connection.jid, this.authenticatedUser)
             : RandomUtil.randomHexString(8).toLowerCase();
 
         logger.info(`JID ${this.connection.jid} using MUC nickname ${mucNickname}`);
+
+        // 这个Muc的昵称是随意的 ... 也就是我们并没有做出控制
         roomjid += mucNickname;
 
+        // 创建一个 不需要密码的房间 ...
         return this.connection.emuc.createRoom(roomjid, null, options);
     }
 
     /**
      * Returns the room JID based on the passed room name and domain.
-     *
+     * 基于传递的房间名称 和 domain 返回 room JID
      * @param {string} roomName - The room name.
      * @param {string} domain - The domain.
      * @returns {string} - The room JID.
@@ -821,22 +849,29 @@ export default class XMPP extends Listenable {
     }
 
     /**
-     *
+     * 初始化一些必要的插件
      */
     _initStrophePlugins() {
+        // 默认的ice配置是 空
         const iceConfig = {
             jvb: { iceServers: [ ] },
             p2p: { iceServers: [ ] }
         };
 
+        // 如果有端到端的stun 服务器
         const p2pStunServers = (this.options.p2p
             && this.options.p2p.stunServers) || DEFAULT_STUN_SERVERS;
 
+        // 如果是一个数组 ...
         if (Array.isArray(p2pStunServers)) {
             logger.info('P2P STUN servers: ', p2pStunServers);
+
+            // 设置端到端的iceServers
             iceConfig.p2p.iceServers = p2pStunServers;
         }
 
+        // p2p 启动,指定了iceTransportPolicy(好像是由于规范需要进行修改)
+        // https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/RTCPeerConnection#iceTransportPolicy
         if (this.options.p2p && this.options.p2p.iceTransportPolicy) {
             logger.info('P2P ICE transport policy: ',
                 this.options.p2p.iceTransportPolicy);
@@ -845,6 +880,7 @@ export default class XMPP extends Listenable {
                 = this.options.p2p.iceTransportPolicy;
         }
 
+        // 连接插件 emuc
         this.connection.addConnectionPlugin('emuc', new MucConnectionPlugin(this));
         this.connection.addConnectionPlugin('jingle', new JingleConnectionPlugin(this, this.eventEmitter, iceConfig));
         this.connection.addConnectionPlugin('rayo', new RayoConnectionPlugin());
@@ -985,7 +1021,7 @@ export default class XMPP extends Listenable {
      * A private message is received, message that is not addressed to the muc.
      * We expect private message coming from plugins component if it is
      * enabled and running.
-     *
+     *接收到一个私有消息, 消息不会解释给 muc, 我们期待私有消息 来自插件组件(如果它启动并运行)
      * @param {string} msg - The message.
      */
     _onPrivateMessage(msg) {

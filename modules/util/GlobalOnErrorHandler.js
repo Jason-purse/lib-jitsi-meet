@@ -3,6 +3,10 @@
  * The custom error handlers respect the previously-defined error handlers.
  * GlobalOnErrorHandler class provides utilities to add many custom error
  * handlers and to execute the error handlers directly.
+ *
+ * 这是一个工具类 定义了自定义的onError 以及 onunhandlerrejection 函数
+ * 自定义错误处理器  尊重/关心之前定义的错误 处理器 .
+ * GlobalOnErrorHandler 类提供了功能去增加 许多自定义的错误处理器  并直接执行错误处理器 ...
  */
 
 
@@ -49,6 +53,7 @@ const GlobalOnErrorHandler = {
     },
 
     /**
+     * 如果有错误处理器,调用错误处理器 ...
      * Calls the global error handler if there is one.
      * @param error the error to pass to the error handler
      */
@@ -58,6 +63,8 @@ const GlobalOnErrorHandler = {
         if (!errHandler) {
             return;
         }
+
+        // 否则直接执行 。。。
         errHandler(null, null, null, null, error);
     },
 
